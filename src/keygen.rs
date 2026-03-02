@@ -2,7 +2,7 @@ use mdx::Result;
 
 pub fn run_keygen(password: &str, id: &str) -> Result<()> {
     log::info!("Generating key for password and id");
-    
+
     println!("Password: {}", password);
     let dict_cryto_key = mdx::crypto::digest::fast_hash_digest(password.as_bytes())?;
     println!("DB cipher: {:?}", hex::encode(&dict_cryto_key));

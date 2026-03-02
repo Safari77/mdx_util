@@ -7,15 +7,15 @@ use crate::fts_index::run_create_index;
 use crate::search::run_search;
 use crate::test_db::run_test_db;
 
-mod error_printer;
-mod test_db;
-mod search;
-mod fts_index;
-mod utils;
-mod keygen;
-mod convert_db;
 mod build_mdd;
+mod convert_db;
+mod error_printer;
+mod fts_index;
+mod keygen;
 mod report;
+mod search;
+mod test_db;
+mod utils;
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -58,11 +58,20 @@ enum Commands {
         path: String,
 
         /// Mode for testing (zdb or mdx)
-        #[arg(long, value_name = "MODE", default_value = "zdb", help = "Testing mode: zdb (single file) or mdx (mdx+mdd group)")]
+        #[arg(
+            long,
+            value_name = "MODE",
+            default_value = "zdb",
+            help = "Testing mode: zdb (single file) or mdx (mdx+mdd group)"
+        )]
         mode: String,
 
         /// Number of entries to test (default: all entries)
-        #[arg(long, value_name = "COUNT", help = "Limit the number of entries to test")]
+        #[arg(
+            long,
+            value_name = "COUNT",
+            help = "Limit the number of entries to test"
+        )]
         count: Option<usize>,
 
         /// Randomly sample entries instead of sequential reading
@@ -83,7 +92,11 @@ enum Commands {
         file: String,
 
         /// Generate an example config file only
-        #[arg(long, default_value = "false", help = "Generate an example config file only")]
+        #[arg(
+            long,
+            default_value = "false",
+            help = "Generate an example config file only"
+        )]
         generate_config_only: bool,
     },
 
@@ -126,19 +139,24 @@ enum Commands {
         keyword: String,
 
         /// Mode for searching (zdb or mdx)
-        #[arg(long, value_name = "MODE", default_value = "zdb", help = "Search mode: zdb or mdx")]
+        #[arg(
+            long,
+            value_name = "MODE",
+            default_value = "zdb",
+            help = "Search mode: zdb or mdx"
+        )]
         mode: String,
 
         /// Show HTML->text preview of content
         #[arg(long, help = "Show HTML content converted to text preview")]
         preview: bool,
 
-        #[arg(long, help="Start with match")]
+        #[arg(long, help = "Start with match")]
         start_with_match: bool,
 
-        #[arg(long, help="Partial match")]
+        #[arg(long, help = "Partial match")]
         partial_match: bool,
-    },  
+    },
 
     /// Create full-text search index for mdx file
     #[command(
@@ -170,7 +188,7 @@ enum Commands {
         #[arg(value_name = "ID")]
         id: String,
     },
-    
+
     /// Perform full-text search using Tantivy index
     #[command(
         name = "fts-search",
@@ -191,33 +209,33 @@ enum Commands {
 }
 
 fn main() {
-    unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
+    unsafe {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
     let args = Args::parse();
 
     let log_level = if let Some(log_level) = &args.log_level {
         log_level.to_lowercase()
     } else {
-        std::env::var("RUST_LOG").unwrap_or("info".to_string()).to_lowercase()
+        std::env::var("RUST_LOG")
+            .unwrap_or("info".to_string())
+            .to_lowercase()
     };
-    let level_filter= match log_level.as_str() {
-            "error" => LevelFilter::Error,
-            "warn" => LevelFilter::Warn,
-            "info" => LevelFilter::Info,
-            "debug" => LevelFilter::Debug,
-            "trace" => LevelFilter::Trace,
-            _ => LevelFilter::Info, // 默认级别
-        };
+    let level_filter = match log_level.as_str() {
+        "error" => LevelFilter::Error,
+        "warn" => LevelFilter::Warn,
+        "info" => LevelFilter::Info,
+        "debug" => LevelFilter::Debug,
+        "trace" => LevelFilter::Trace,
+        _ => LevelFilter::Info, // 默认级别
+    };
     fern::Dispatch::new()
-    .format(|out, message, _record| {
-        out.finish(format_args!(
-            "{}",
-            message
-        ))
-    })
-    .level(level_filter)
-    .level_for("tantivy", LevelFilter::Warn)
-    .chain(std::io::stdout())
-    .apply().unwrap();
+        .format(|out, message, _record| out.finish(format_args!("{}", message)))
+        .level(level_filter)
+        .level_for("tantivy", LevelFilter::Warn)
+        .chain(std::io::stdout())
+        .apply()
+        .unwrap();
     if let Err(e) = run(&args) {
         error!("{}", error_printer::format_error(&e));
         std::process::exit(1);
@@ -226,28 +244,46 @@ fn main() {
 
 fn run(args: &Args) -> Result<()> {
     match &args.command {
-        Commands::Test { path, mode, count, random } => {
+        Commands::Test {
+            path,
+            mode,
+            count,
+            random,
+        } => {
             let mdx_mode = mode == "mdx";
             run_test_db(path, mdx_mode, *count, *random)
-        },
-        Commands::ConvertDb { file, generate_config_only } => {
-            convert_db::run_convert_db(file, *generate_config_only)
-        },
-        Commands::BuildMdd { directory, file, password } => {
-            build_mdd::run_build_mdd(directory, &password, &file)
-        },
-        Commands::List { file, keyword, mode, preview, start_with_match, partial_match } => {
+        }
+        Commands::ConvertDb {
+            file,
+            generate_config_only,
+        } => convert_db::run_convert_db(file, *generate_config_only),
+        Commands::BuildMdd {
+            directory,
+            file,
+            password,
+        } => build_mdd::run_build_mdd(directory, &password, &file),
+        Commands::List {
+            file,
+            keyword,
+            mode,
+            preview,
+            start_with_match,
+            partial_match,
+        } => {
             let mdx_mode = mode == "mdx";
-            run_search(file, keyword, mdx_mode, *preview, *start_with_match, *partial_match)
-        },
-        Commands::CreateIndex { file } => {
-            run_create_index(file)
-        },
-        Commands::Keygen { password, id } => {
-            keygen::run_keygen(password, id)
-        },
+            run_search(
+                file,
+                keyword,
+                mdx_mode,
+                *preview,
+                *start_with_match,
+                *partial_match,
+            )
+        }
+        Commands::CreateIndex { file } => run_create_index(file),
+        Commands::Keygen { password, id } => keygen::run_keygen(password, id),
         Commands::FtsSearch { mdx_file, keyword } => {
             fts_index::run_fulltext_search(mdx_file, keyword, 100)
-        },
+        }
     }
 }

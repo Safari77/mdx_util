@@ -14,7 +14,8 @@ pub fn generate_config_file(file_path: &str) -> Result<()> {
     config.output_file = "/path/to/output.mdx".to_string();
     config.build_mdd = false;
 
-    let json = serde_json::to_string_pretty(&config).map_err(|e| ZdbError::general_error(e.to_string()))?;
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|e| ZdbError::general_error(e.to_string()))?;
     std::fs::write(config_path, json)?;
     Ok(())
 }
@@ -26,21 +27,21 @@ pub fn run_convert_db(config_file_path: &str, generate_config_only: bool) -> Res
     }
 
     info!("Converting file: {}", config_file_path);
-    
+
     let mdx_path = shellexpand::tilde(config_file_path).to_string();
-    
+
     let config: BuilderConfig = serde_json::from_str(&std::fs::read_to_string(mdx_path.clone())?)
         .map_err(|e| ZdbError::general_error(e.to_string()))?;
 
     // config.input_file = mdx_path.clone();
     // config.output_file = mdx_path.clone().replace(".json", ".new.mdx");
     // config.build_mdd = false;
-    
+
     info!("Input file: {}", config.input_path);
     info!("Output file: {}", config.output_file);
-    
+
     ZDBBuilder::build_with_config(&config, Some(print_progress))?;
-    
-    info!("Conversion completed successfully!");    
+
+    info!("Conversion completed successfully!");
     Ok(())
 }
