@@ -64,7 +64,7 @@ tantivy = "0.25"
 lol_html = "2.6"
 
 # Archive handling (for MDD packaging)
-zip = { version = "6.0", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate", "deflate64"] }
 
 [profile.release]
 opt-level = 3
