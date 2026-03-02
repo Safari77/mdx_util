@@ -1,5 +1,4 @@
 use log::info;
-use serde_json;
 
 use mdx::builder::zdb_builder::ZDBBuilder;
 use mdx::builder::BuilderConfig;

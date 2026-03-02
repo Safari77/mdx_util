@@ -261,7 +261,7 @@ fn run(args: &Args) -> Result<()> {
             directory,
             file,
             password,
-        } => build_mdd::run_build_mdd(directory, &password, &file),
+        } => build_mdd::run_build_mdd(directory, password, file),
         Commands::List {
             file,
             keyword,

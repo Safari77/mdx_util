@@ -35,7 +35,7 @@ pub fn search_zdb(
 
             let indexes = zdb.get_indexes(index.entry_no, 10)?;
             for (i, entry_index) in indexes.iter().enumerate() {
-                let content_bytes = zdb.get_data(&entry_index, true)?;
+                let content_bytes = zdb.get_data(entry_index, true)?;
                 let content = if zdb.is_binary_content() {
                     format!("Binary content ({} bytes)", content_bytes.len())
                 } else {
@@ -53,15 +53,15 @@ pub fn search_zdb(
                     println!("     Preview: {}", utils::take_chars(&text_content, 1000));
                 }
             }
-            return Ok(());
+            Ok(())
         }
         Ok(None) => {
             info!("No match found for key: {}", key);
-            return Ok(());
+            Ok(())
         }
         Err(e) => {
             error!("Error with search: {:}", e);
-            return Err(e);
+            Err(e)
         }
     }
 }
@@ -93,7 +93,7 @@ pub fn search_mdx_db(
 
             let indexes = mdx_reader.get_indexes(key_index.entry_no, 10)?;
             for (i, entry_index) in indexes.iter().enumerate() {
-                let content = mdx_reader.get_html(&entry_index)?;
+                let content = mdx_reader.get_html(entry_index)?;
                 println!(
                     "  {}: '{}' at {} - Size: {} bytes",
                     i + 1,
@@ -106,15 +106,15 @@ pub fn search_mdx_db(
                     println!("     Preview: {}", utils::take_chars(&text_content, 1000));
                 }
             }
-            return Ok(());
+            Ok(())
         }
         Ok(None) => {
             info!("No match found for key: {}", key);
-            return Ok(());
+            Ok(())
         }
         Err(e) => {
             error!("Error with search: {:}", e);
-            return Err(e);
+            Err(e)
         }
     }
 }
