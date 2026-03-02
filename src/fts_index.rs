@@ -14,6 +14,7 @@ pub fn search_mdx_fulltext(
     query: &str,
     max_results: usize,
     quiet: bool,
+    render: bool,
 ) -> Result<()> {
     if !quiet {
         info!(
@@ -45,7 +46,7 @@ pub fn search_mdx_fulltext(
         info!("✓ FTS index is available, performing search...");
     }
 
-    // Perform full-text search using dynamic limit
+    // Perform full-text search
     let search_results = mdx_reader.fts_search(query, max_results)?;
 
     if !quiet {
@@ -65,7 +66,6 @@ pub fn search_mdx_fulltext(
             println!("Entry No: {}", entry_no);
             println!("Key: {}", key);
         } else {
-            // When quiet, optionally print the key to distinguish records
             println!("{}:", key);
         }
 
@@ -73,17 +73,21 @@ pub fn search_mdx_fulltext(
         if let Ok(key_index) = mdx_reader.get_index(*entry_no as mdx::storage::key_block::EntryNo) {
             match mdx_reader.get_html(&key_index) {
                 Ok(html_content) => {
-                    // Extract text content, unescape, and truncate for display
-                    let text_content = mdx::utils::extract_text_from_html(&html_content)?;
-                    let unescaped_text = utils::unescape_entities(&text_content);
+                    let display_text = if render {
+                        // Apply terminal formatting and ensure we reset colors/styles at the end
+                        format!("{}\x1b[0m", utils::render_html_to_terminal(&html_content))
+                    } else {
+                        let text_content = mdx::utils::extract_text_from_html(&html_content)?;
+                        utils::unescape_entities(&text_content)
+                    };
 
                     if !quiet {
                         println!(
-                            "Content Preview: {}",
-                            utils::take_chars(&unescaped_text, 1048576)
+                            "Content Preview:\n{}",
+                            utils::take_chars(&display_text, 1048576)
                         );
                     } else {
-                        println!("{}", utils::take_chars(&unescaped_text, 1048576));
+                        println!("{}", utils::take_chars(&display_text, 1048576));
                     }
                 }
                 Err(_) => {
@@ -98,10 +102,7 @@ pub fn search_mdx_fulltext(
             }
         }
 
-        if !quiet {
-            println!("{}", "-".repeat(80));
-            println!();
-        }
+        println!("{}", "—".repeat(80));
     }
 
     if !quiet {
@@ -152,6 +153,7 @@ pub fn run_fulltext_search(
     query: &str,
     max_results: usize,
     quiet: bool,
+    render: bool,
 ) -> mdx::Result<()> {
     let target = mdx::utils::io_utils::fix_windows_path_buf(PathBuf::from(
         shellexpand::tilde(path).to_string(),
@@ -171,5 +173,5 @@ pub fn run_fulltext_search(
         return Ok(());
     }
 
-    search_mdx_fulltext(&target, query, max_results, quiet)
+    search_mdx_fulltext(&target, query, max_results, quiet, render)
 }

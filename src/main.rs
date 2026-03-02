@@ -213,29 +213,41 @@ enum Commands {
         /// Print only the results (suppress headers and separators)
         #[arg(long, help = "Print only the results")]
         quiet: bool,
+
+        /// Render HTML tags to terminal formatting
+        #[arg(
+            long,
+            help = "Render HTML formatting (bold, italic, new lines, colors) to terminal"
+        )]
+        render: bool,
     },
 }
 
 fn main() {
-    unsafe {
-        std::env::set_var("RUST_BACKTRACE", "1");
-    }
     let args = Args::parse();
 
+    let mut is_quiet = false;
+    if let Commands::FtsSearch { quiet, .. } = &args.command {
+        is_quiet = *quiet;
+    }
+    // Set default log level to 'warn' if quiet is enabled, otherwise 'info'
     let log_level = if let Some(log_level) = &args.log_level {
         log_level.to_lowercase()
+    } else if is_quiet {
+        "warn".to_string()
     } else {
         std::env::var("RUST_LOG")
             .unwrap_or("info".to_string())
             .to_lowercase()
     };
+
     let level_filter = match log_level.as_str() {
         "error" => LevelFilter::Error,
         "warn" => LevelFilter::Warn,
         "info" => LevelFilter::Info,
         "debug" => LevelFilter::Debug,
         "trace" => LevelFilter::Trace,
-        _ => LevelFilter::Info, // 默认级别
+        _ => LevelFilter::Info, // Default level
     };
     fern::Dispatch::new()
         .format(|out, message, _record| out.finish(format_args!("{}", message)))
@@ -295,6 +307,7 @@ fn run(args: &Args) -> Result<()> {
             keyword,
             results,
             quiet,
-        } => fts_index::run_fulltext_search(mdx_file, keyword, *results, *quiet),
+            render,
+        } => fts_index::run_fulltext_search(mdx_file, keyword, *results, *quiet, *render),
     }
 }
