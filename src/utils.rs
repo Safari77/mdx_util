@@ -7,3 +7,10 @@ pub fn take_chars(s: &str, n: usize) -> &str {
         .unwrap_or_else(|| s.len()); // 若不足 n 个字符，则取到末尾
     &s[..byte_end]
 }
+
+pub fn unescape_entities(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+}

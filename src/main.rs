@@ -205,6 +205,14 @@ enum Commands {
         /// Keyword to search for in the index
         #[arg(value_name = "KEYWORD")]
         keyword: String,
+
+        /// Limit number of matches in FTS search
+        #[arg(long, default_value_t = 100, help = "Limit number of matches")]
+        results: usize,
+
+        /// Print only the results (suppress headers and separators)
+        #[arg(long, help = "Print only the results")]
+        quiet: bool,
     },
 }
 
@@ -282,8 +290,11 @@ fn run(args: &Args) -> Result<()> {
         }
         Commands::CreateIndex { file } => run_create_index(file),
         Commands::Keygen { password, id } => keygen::run_keygen(password, id),
-        Commands::FtsSearch { mdx_file, keyword } => {
-            fts_index::run_fulltext_search(mdx_file, keyword, 100)
-        }
+        Commands::FtsSearch {
+            mdx_file,
+            keyword,
+            results,
+            quiet,
+        } => fts_index::run_fulltext_search(mdx_file, keyword, *results, *quiet),
     }
 }

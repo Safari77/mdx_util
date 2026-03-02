@@ -9,12 +9,19 @@ use crate::report::print_progress;
 use crate::utils;
 
 // Full-text search function using MdxReader with FTS index
-pub fn search_mdx_fulltext(file_path: &PathBuf, query: &str, max_results: usize) -> Result<()> {
-    info!(
-        "Full-text search for '{}' in MDX file: {}",
-        query,
-        file_path.display()
-    );
+pub fn search_mdx_fulltext(
+    file_path: &PathBuf,
+    query: &str,
+    max_results: usize,
+    quiet: bool,
+) -> Result<()> {
+    if !quiet {
+        info!(
+            "Full-text search for '{}' in MDX file: {}",
+            query,
+            file_path.display()
+        );
+    }
 
     // Create URL from file path and open with MdxReader
     let mdx_url = url::Url::from_file_path(file_path)
@@ -24,56 +31,82 @@ pub fn search_mdx_fulltext(file_path: &PathBuf, query: &str, max_results: usize)
 
     // Check if FTS is available
     if !mdx_reader.is_fts_available() {
-        println!("Full-text search index is not available for this MDX file.");
-        println!(
-            "Please create an index first using: mdx_util create-index {}",
-            file_path.display()
-        );
+        if !quiet {
+            println!("Full-text search index is not available for this MDX file.");
+            println!(
+                "Please create an index first using: mdx_util create-index {}",
+                file_path.display()
+            );
+        }
         return Ok(());
     }
 
-    info!("✓ FTS index is available, performing search...");
+    if !quiet {
+        info!("✓ FTS index is available, performing search...");
+    }
 
-    // Perform full-text search
+    // Perform full-text search using dynamic limit
     let search_results = mdx_reader.fts_search(query, max_results)?;
 
-    // Display search results
-    println!("\n=== Full-Text Search Results for '{}' ===\n", query);
+    if !quiet {
+        println!("\n=== Full-Text Search Results for '{}' ===\n", query);
+    }
 
     if search_results.is_empty() {
-        println!("No results found for query: '{}'", query);
+        if !quiet {
+            println!("No results found for query: '{}'", query);
+        }
         return Ok(());
     }
 
     for (index, (score, entry_no, key)) in search_results.iter().enumerate() {
-        println!("Result #{} (Score: {:.3})", index + 1, score);
-        println!("Entry No: {}", entry_no);
-        println!("Key: {}", key);
+        if !quiet {
+            println!("Result #{} (Score: {:.3})", index + 1, score);
+            println!("Entry No: {}", entry_no);
+            println!("Key: {}", key);
+        } else {
+            // When quiet, optionally print the key to distinguish records
+            println!("{}:", key);
+        }
 
         // Get the original HTML content from the MDX file
         if let Ok(key_index) = mdx_reader.get_index(*entry_no as mdx::storage::key_block::EntryNo) {
             match mdx_reader.get_html(&key_index) {
                 Ok(html_content) => {
-                    // Extract text content and truncate for display
+                    // Extract text content, unescape, and truncate for display
                     let text_content = mdx::utils::extract_text_from_html(&html_content)?;
-                    println!(
-                        "Content Preview: {}",
-                        utils::take_chars(&text_content, 1024)
-                    );
+                    let unescaped_text = utils::unescape_entities(&text_content);
+
+                    if !quiet {
+                        println!(
+                            "Content Preview: {}",
+                            utils::take_chars(&unescaped_text, 1048576)
+                        );
+                    } else {
+                        println!("{}", utils::take_chars(&unescaped_text, 1048576));
+                    }
                 }
                 Err(_) => {
-                    println!("Content: [Error retrieving content]");
+                    if !quiet {
+                        println!("Content: [Error retrieving content]");
+                    }
                 }
             }
         } else {
-            println!("Content: [Error retrieving entry]");
+            if !quiet {
+                println!("Content: [Error retrieving entry]");
+            }
         }
 
-        println!("{}", "-".repeat(80));
-        println!();
+        if !quiet {
+            println!("{}", "-".repeat(80));
+            println!();
+        }
     }
 
-    println!("Total results: {}", search_results.len());
+    if !quiet {
+        println!("Total results: {}", search_results.len());
+    }
 
     Ok(())
 }
@@ -114,7 +147,12 @@ pub fn run_create_index(mdx_file_path: &str) -> mdx::Result<()> {
 }
 
 // Run function for full-text search command
-pub fn run_fulltext_search(path: &str, query: &str, max_results: usize) -> mdx::Result<()> {
+pub fn run_fulltext_search(
+    path: &str,
+    query: &str,
+    max_results: usize,
+    quiet: bool,
+) -> mdx::Result<()> {
     let target = mdx::utils::io_utils::fix_windows_path_buf(PathBuf::from(
         shellexpand::tilde(path).to_string(),
     ));
@@ -133,5 +171,5 @@ pub fn run_fulltext_search(path: &str, query: &str, max_results: usize) -> mdx::
         return Ok(());
     }
 
-    search_mdx_fulltext(&target, query, max_results)
+    search_mdx_fulltext(&target, query, max_results, quiet)
 }
