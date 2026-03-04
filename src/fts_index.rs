@@ -43,30 +43,58 @@ pub fn search_mdx_fulltext(
     }
 
     if !quiet {
-        info!("✓ FTS index is available, performing search...");
+        info!("FTS index is available, performing search...");
     }
 
-    // Perform full-text search
-    let search_results = mdx_reader.fts_search(query, max_results)?;
+    // Perform full-text search fetching up to 100 results to find an exact match
+    let mut initial_results = mdx_reader.fts_search(query, 100)?;
 
     if !quiet {
         println!("\n=== Full-Text Search Results for '{}' ===\n", query);
     }
 
-    if search_results.is_empty() {
+    if initial_results.is_empty() {
         if !quiet {
             println!("No results found for query: '{}'", query);
         }
         return Ok(());
     }
 
+    // Find the index of the exact match
+    let mut exact_match_idx = None;
+    for (i, (_, _, key)) in initial_results.iter().enumerate() {
+        if key == query {
+            // Use `key.eq_ignore_ascii_case(query)` here if you want it case-insensitive
+            exact_match_idx = Some(i);
+            break;
+        }
+    }
+
+    // Build the final results list, placing the exact match first
+    let mut search_results = Vec::with_capacity(max_results);
+
+    // 1. Add the exact match first (if found)
+    if let Some(idx) = exact_match_idx {
+        search_results.push(initial_results.remove(idx));
+    }
+
+    // 2. Add the remaining results until we hit max_results
+    for res in initial_results {
+        if search_results.len() < max_results {
+            search_results.push(res);
+        } else {
+            break;
+        }
+    }
+
+    // Iterate over our newly ordered and truncated search_results
     for (index, (score, entry_no, key)) in search_results.iter().enumerate() {
         if !quiet {
             println!("Result #{} (Score: {:.3})", index + 1, score);
             println!("Entry No: {}", entry_no);
             println!("Key: {}", key);
         } else {
-            println!("{}:", key);
+            println!("\x1b[32m{}\x1b[0m", key); // Green
         }
 
         // Get the original HTML content from the MDX file
