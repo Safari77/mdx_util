@@ -105,8 +105,8 @@ pub fn search_mdx_fulltext(
                         // Apply terminal formatting and ensure we reset colors/styles at the end
                         format!("{}\x1b[0m", utils::render_html_to_terminal(&html_content))
                     } else {
-                        let text_content = mdx::utils::extract_text_from_html(&html_content)?;
-                        utils::unescape_entities(&text_content)
+                        //mdx::utils::extract_text_from_html(&html_content)?
+                        html_content
                     };
 
                     if !quiet {
