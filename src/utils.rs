@@ -20,7 +20,7 @@ pub fn unescape_entities(text: &str) -> String {
         .replace("&nbsp;", " ")
 }
 
-// ANSI escape codes
+// ANSI escape codes — basic
 const BOLD_ON: &str = "\x1b[1m";
 const BOLD_OFF: &str = "\x1b[22m";
 const ITALIC_ON: &str = "\x1b[3m";
@@ -54,30 +54,135 @@ macro_rules! push_end_tag_handler {
     };
 }
 
-/// Renders OED4/MDX HTML to terminal with ANSI colors, bold, italic, and proper indentation.
+/// Parse a CSS/HTML color value and return an ANSI escape sequence.
+/// Supports:
+///   - 6-digit hex: "CA0000", "#CA0000"
+///   - 3-digit hex: "#F00"
+///   - CSS named colors (common subset)
+/// Returns 24-bit truecolor ANSI for kitty/modern terminals,
+/// with fallback to basic 16-color for well-known names.
+fn color_to_ansi(color: &str) -> Option<String> {
+    let color = color.trim().trim_matches('"').trim_matches('\'');
+    if color.is_empty() {
+        return None;
+    }
+
+    // Try named colors first (case-insensitive)
+    let lower = color.to_ascii_lowercase();
+    match lower.as_str() {
+        // Basic ANSI colors — use standard codes for maximum compatibility
+        "black" => return Some("\x1b[30m".to_string()),
+        "red" => return Some("\x1b[31m".to_string()),
+        "green" => return Some("\x1b[32m".to_string()),
+        "yellow" => return Some("\x1b[33m".to_string()),
+        "blue" => return Some("\x1b[34m".to_string()),
+        "magenta" | "fuchsia" => return Some("\x1b[35m".to_string()),
+        "cyan" | "aqua" => return Some("\x1b[36m".to_string()),
+        "white" => return Some("\x1b[37m".to_string()),
+        // Bright variants
+        "gray" | "grey" => return Some("\x1b[90m".to_string()),
+        "lightgray" | "lightgrey" | "silver" => return Some("\x1b[37m".to_string()),
+        // Named colors → 24-bit truecolor (kitty supports this natively)
+        "darkred" | "maroon" => return Some(format!("\x1b[38;2;128;0;0m")),
+        "darkgreen" => return Some(format!("\x1b[38;2;0;100;0m")),
+        "darkblue" | "navy" => return Some(format!("\x1b[38;2;0;0;128m")),
+        "darkcyan" | "teal" => return Some(format!("\x1b[38;2;0;128;128m")),
+        "darkmagenta" | "purple" => return Some(format!("\x1b[38;2;128;0;128m")),
+        "darkorange" => return Some(format!("\x1b[38;2;255;140;0m")),
+        "darkslategray" | "darkslategrey" => return Some(format!("\x1b[38;2;47;79;79m")),
+        "slategray" | "slategrey" => return Some(format!("\x1b[38;2;112;128;144m")),
+        "dimgray" | "dimgrey" => return Some(format!("\x1b[38;2;105;105;105m")),
+        "olive" => return Some(format!("\x1b[38;2;128;128;0m")),
+        "olivedrab" => return Some(format!("\x1b[38;2;107;142;35m")),
+        "brown" | "saddlebrown" => return Some(format!("\x1b[38;2;139;69;19m")),
+        "sienna" => return Some(format!("\x1b[38;2;160;82;45m")),
+        "chocolate" => return Some(format!("\x1b[38;2;210;105;30m")),
+        "firebrick" => return Some(format!("\x1b[38;2;178;34;34m")),
+        "crimson" => return Some(format!("\x1b[38;2;220;20;60m")),
+        "indianred" => return Some(format!("\x1b[38;2;205;92;92m")),
+        "tomato" => return Some(format!("\x1b[38;2;255;99;71m")),
+        "orangered" => return Some(format!("\x1b[38;2;255;69;0m")),
+        "coral" => return Some(format!("\x1b[38;2;255;127;80m")),
+        "salmon" => return Some(format!("\x1b[38;2;250;128;114m")),
+        "gold" => return Some(format!("\x1b[38;2;255;215;0m")),
+        "khaki" => return Some(format!("\x1b[38;2;240;230;140m")),
+        "limegreen" => return Some(format!("\x1b[38;2;50;205;50m")),
+        "forestgreen" => return Some(format!("\x1b[38;2;34;139;34m")),
+        "seagreen" => return Some(format!("\x1b[38;2;46;139;87m")),
+        "steelblue" => return Some(format!("\x1b[38;2;70;130;180m")),
+        "royalblue" => return Some(format!("\x1b[38;2;65;105;225m")),
+        "dodgerblue" => return Some(format!("\x1b[38;2;30;144;255m")),
+        "cornflowerblue" => return Some(format!("\x1b[38;2;100;149;237m")),
+        "cadetblue" => return Some(format!("\x1b[38;2;95;158;160m")),
+        "deepskyblue" => return Some(format!("\x1b[38;2;0;191;255m")),
+        "mediumblue" => return Some(format!("\x1b[38;2;0;0;205m")),
+        "midnightblue" => return Some(format!("\x1b[38;2;25;25;112m")),
+        "blueviolet" => return Some(format!("\x1b[38;2;138;43;226m")),
+        "darkviolet" => return Some(format!("\x1b[38;2;148;0;211m")),
+        "darkorchid" => return Some(format!("\x1b[38;2;153;50;204m")),
+        "mediumorchid" => return Some(format!("\x1b[38;2;186;85;211m")),
+        "orchid" => return Some(format!("\x1b[38;2;218;112;214m")),
+        "violet" => return Some(format!("\x1b[38;2;238;130;238m")),
+        "plum" => return Some(format!("\x1b[38;2;221;160;221m")),
+        "hotpink" => return Some(format!("\x1b[38;2;255;105;180m")),
+        "deeppink" => return Some(format!("\x1b[38;2;255;20;147m")),
+        "pink" => return Some(format!("\x1b[38;2;255;192;203m")),
+        "rosybrown" => return Some(format!("\x1b[38;2;188;143;143m")),
+        "tan" => return Some(format!("\x1b[38;2;210;180;140m")),
+        "peru" => return Some(format!("\x1b[38;2;205;133;63m")),
+        "burlywood" => return Some(format!("\x1b[38;2;222;184;135m")),
+        "wheat" => return Some(format!("\x1b[38;2;245;222;179m")),
+        _ => {}
+    }
+
+    // Try hex color
+    let hex = color.strip_prefix('#').unwrap_or(color);
+    let (r, g, b) = match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            (r, g, b)
+        }
+        3 => {
+            let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+            let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+            let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+            (r, g, b)
+        }
+        _ => return None,
+    };
+
+    // Use 24-bit truecolor — kitty supports this natively
+    Some(format!("\x1b[38;2;{};{};{}m", r, g, b))
+}
+
+/// Renders MDX dictionary HTML to terminal with ANSI colors, bold, italic.
 ///
-/// Uses lol_html for streaming HTML parsing — no regex, no unescape/re-escape roundtrips.
+/// Works with any dictionary format — handles both standard HTML tags and
+/// dictionary-specific custom tags (OED4, Webster, etc.) without configuration.
 ///
-/// Handles OED4-specific custom tags:
-/// - `<se0>` headword entry line → newline before
-/// - `<se4>` definition/sense → indentation + newline before
-/// - `<se8>` quotation block → deeper indentation + newline before
-/// - `<d>` date → yellow + space after
-/// - `<ch>` citation header (author) → bold
-/// - `<qt>` quotation text → italic
-/// - `<ph>` phonetic → green
-/// - `<hw>` headword → bold + underline
-/// - `<ls>` sense label → bold
-/// - `<w>` abbreviation → dim (simulating small-caps)
-/// - `<a href="entry://...">` cross-reference link → cyan + underline
-/// - `<spg>` spelling group → newline before, dim
-/// - `<dg>` definition/etymology group → newline before
-/// - `<script>`, `<link>`, `<style>` → stripped entirely
+/// Standard HTML handled:
 /// - `<b>`, `<strong>` → bold
 /// - `<i>`, `<em>` → italic
 /// - `<u>` → underline
 /// - `<br>` → newline
-/// - `<seg>` → separator line
+/// - `<font color="...">` → ANSI color (truecolor for kitty)
+/// - `<font size="+1">` → bold (terminal has no font sizes)
+/// - `<a href="entry://...">` → cyan underline with target shown
+/// - `<script>`, `<style>`, `<link>` → stripped
+/// - `&nbsp;` → preserved as space (used for indentation in Webster etc.)
+///
+/// OED4-specific:
+/// - `<se0>`, `<se4>`, `<se8>` → structural indentation
+/// - `<d>` → yellow (date), `<ch>` → bold (author), `<qt>` → italic (quote)
+/// - `<ph>` → green (phonetic), `<hw>` → bold+underline (headword)
+/// - `<ls>` → bold (sense label), `<w>` → dim (abbreviation)
+/// - `<spg>` → dim (spelling group), `<dg>` → newline (etymology)
+///
+/// Other dictionaries:
+/// - `<com>` → passthrough (Webster comments/metadata)
+/// - Unknown tags → stripped, content kept
 pub fn render_html_to_terminal(html: &str) -> String {
     let result = RefCell::new(String::with_capacity(html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
@@ -106,7 +211,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // === Strip <style> and all content inside ===
             element!("style", {
                 move |el| {
@@ -120,7 +224,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // === Strip <link> (self-closing, no content) ===
             element!("link", {
                 move |el| {
@@ -128,7 +231,56 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            // === <font> tag: handle color and size attributes ===
+            // Works for Webster (<font color="CA0000">, <font size=+1>)
+            // and any other dictionary using <font> tags
+            element!("font", {
+                move |el| {
+                    let mut did_color = false;
 
+                    // Handle color attribute
+                    if let Some(color_val) = el.get_attribute("color") {
+                        if let Some(ansi) = color_to_ansi(&color_val) {
+                            el.before(&ansi, ContentType::Html);
+                            did_color = true;
+                        }
+                    }
+
+                    // Handle size attribute: size=+1 or larger → bold
+                    if let Some(size_val) = el.get_attribute("size") {
+                        let size_str = size_val.trim();
+                        let is_large = size_str.starts_with('+')
+                            || size_str.parse::<i32>().map_or(false, |n| n > 3);
+                        if is_large {
+                            el.before(BOLD_ON, ContentType::Html);
+                            let needs_color_reset = did_color;
+                            push_end_tag_handler!(el, move |end| {
+                                let mut reset = BOLD_OFF.to_string();
+                                if needs_color_reset {
+                                    reset.push_str(COLOR_RESET);
+                                }
+                                end.before(&reset, ContentType::Html);
+                                end.remove();
+                                Ok(())
+                            });
+                            el.remove_and_keep_content();
+                            return Ok(());
+                        }
+                    }
+
+                    // If only color (no size), reset color at end
+                    if did_color {
+                        push_end_tag_handler!(el, |end| {
+                            end.before(COLOR_RESET, ContentType::Html);
+                            end.remove();
+                            Ok(())
+                        });
+                    }
+
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
             // === Structural OED4 tags ===
 
             // <se0> headword entry line: double newline before
@@ -141,40 +293,36 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
-            // <se4> definition/sense block: newline + indent
+            // <se4> definition/sense block: indent only (OED source has line breaks between blocks)
             element!("se4", {
                 let indent = &indent_level;
                 move |el| {
                     *indent.borrow_mut() = 4;
-                    el.before(&format!("\n{}", SE4_INDENT), ContentType::Text);
+                    el.before(SE4_INDENT, ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-
-            // <se8> quotation block: newline + deeper indent
+            // <se8> quotation block: indent only (OED source has line breaks between blocks)
             element!("se8", {
                 let indent = &indent_level;
                 move |el| {
                     *indent.borrow_mut() = 8;
-                    el.before(&format!("\n{}", SE8_INDENT), ContentType::Text);
+                    el.before(SE8_INDENT, ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-
-            // <q> individual quotation: newline + current indent
+            // <q> individual quotation: indent only
             element!("q", {
                 let indent = &indent_level;
                 move |el| {
                     let level = *indent.borrow();
-                    el.before(&format!("\n{}", indent_str(level)), ContentType::Text);
+                    el.before(indent_str(level), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-
             // <seg> separator
             element!("seg", {
                 move |el| {
@@ -182,13 +330,10 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
-            // <spg> spelling/forms group: newline, dim text
+            // <spg> spelling/forms group: dim text
             element!("spg", {
-                let indent = &indent_level;
                 move |el| {
-                    let level = *indent.borrow();
-                    el.before(&format!("\n{}{}", indent_str(level), DIM), ContentType::Html);
+                    el.before(DIM, ContentType::Html);
                     push_end_tag_handler!(el, |end| {
                         end.before(DIM_OFF, ContentType::Html);
                         end.remove();
@@ -198,18 +343,13 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
-            // <dg> definition/etymology group: newline before
+            // <dg> definition/etymology group
             element!("dg", {
-                let indent = &indent_level;
                 move |el| {
-                    let level = *indent.borrow();
-                    el.before(&format!("\n{}", indent_str(level)), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-
             // === Inline formatting: OED4-specific ===
 
             // <hw> headword: bold + underline
@@ -225,7 +365,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <ph> phonetic transcription: green
             element!("ph", {
                 move |el| {
@@ -239,7 +378,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <d> date: yellow, space after
             element!("d", {
                 move |el| {
@@ -253,7 +391,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <ch> citation header (author): bold
             element!("ch", {
                 move |el| {
@@ -267,7 +404,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <qt> quotation text: italic
             element!("qt", {
                 move |el| {
@@ -281,7 +417,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <ls> sense label/number: bold
             element!("ls", {
                 move |el| {
@@ -295,7 +430,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <w> abbreviation word: dim (simulates small-caps look)
             element!("w", {
                 move |el| {
@@ -309,7 +443,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <a> links: if href starts with entry://, show as cyan underline with target
             // Otherwise just keep content
             element!("a", {
@@ -320,7 +453,10 @@ pub fn render_html_to_terminal(html: &str) -> String {
                         el.before(&format!("{}{}", CYAN, UNDERLINE_ON), ContentType::Html);
                         push_end_tag_handler!(el, move |end| {
                             end.before(
-                                &format!("{}{} [→{}]{}{}", UNDERLINE_OFF, DIM, target, DIM_OFF, COLOR_RESET),
+                                &format!(
+                                    "{}{} [→{}]{}{}",
+                                    UNDERLINE_OFF, DIM, target, DIM_OFF, COLOR_RESET
+                                ),
                                 ContentType::Html,
                             );
                             end.remove();
@@ -329,7 +465,10 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     } else if !href.is_empty() {
                         el.before(&format!("{}{}", CYAN, UNDERLINE_ON), ContentType::Html);
                         push_end_tag_handler!(el, |end| {
-                            end.before(&format!("{}{}", UNDERLINE_OFF, COLOR_RESET), ContentType::Html);
+                            end.before(
+                                &format!("{}{}", UNDERLINE_OFF, COLOR_RESET),
+                                ContentType::Html,
+                            );
                             end.remove();
                             Ok(())
                         });
@@ -338,7 +477,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // === Standard HTML formatting ===
 
             // <b>, <strong> → bold
@@ -354,7 +492,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <i>, <em> → italic
             element!("i, em", {
                 move |el| {
@@ -368,7 +505,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <u> → underline
             element!("u", {
                 move |el| {
@@ -382,17 +518,13 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
-            // <br> → newline + current indent
+            // <br> → newline (no indent — Webster uses &nbsp; for indentation)
             element!("br", {
-                let indent = &indent_level;
                 move |el| {
-                    let level = *indent.borrow();
-                    el.replace(&format!("\n{}", indent_str(level)), ContentType::Text);
+                    el.replace("\n", ContentType::Text);
                     Ok(())
                 }
             }),
-
             // <p>, <div>, <tr> → newline after content
             element!("p, div, tr", {
                 let indent = &indent_level;
@@ -408,7 +540,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <td> → tab
             element!("td", {
                 move |el| {
@@ -417,7 +548,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <sup> → just keep content (no terminal superscript)
             element!("sup", {
                 move |el| {
@@ -425,7 +555,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <small> → keep content
             element!("small", {
                 move |el| {
@@ -433,7 +562,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // <st> struck-through text in OED → dim
             element!("st", {
                 move |el| {
@@ -447,16 +575,15 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-
             // === Passthrough structural wrappers: remove tag, keep content ===
-            // OED4 wrappers: phon, gbl, gbr, n, c, cw, hg, idg, see, cnt
-            element!("phon, gbl, gbr, n, c, cw, hg, idg, see, cnt, li", {
+            // OED4: phon, gbl, gbr, n, c, cw, hg, idg, see, cnt
+            // Webster: com (comment/metadata tag)
+            element!("phon, gbl, gbr, n, c, cw, hg, idg, see, cnt, li, com", {
                 move |el| {
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-
             // The OED4 root element (lol_html lowercases tag names per HTML5 spec)
             element!("oed4", {
                 move |el| {
@@ -483,7 +610,13 @@ pub fn render_html_to_terminal(html: &str) -> String {
 
     let raw = result.into_inner();
 
-    // Post-process: condense 3+ consecutive newlines into 2, strip \r and leading tabs
+    // Post-process:
+    // - Replace &nbsp; with space (lol_html passes entities through as-is)
+    // - Strip \r
+    // - Strip leading tabs after newlines (from OED source indentation)
+    // - Condense 3+ consecutive newlines into 2
+    let raw = raw.replace("&nbsp;", " ");
+
     let mut cleaned = String::with_capacity(raw.len());
     let mut newline_count = 0u32;
     for ch in raw.chars() {
@@ -496,8 +629,9 @@ pub fn render_html_to_terminal(html: &str) -> String {
             // Skip \r (from \r\n in the raw data)
             continue;
         } else if ch == '\t' && newline_count > 0 {
-            // Tab after newline is from the original HTML source indentation — skip it
-            // (our element handlers apply proper indentation)
+            // Tab after newline is from the original OED HTML source indentation — skip it
+            // (our element handlers apply proper indentation for OED;
+            //  Webster uses &nbsp; which is already converted to spaces above)
             continue;
         } else {
             newline_count = 0;
