@@ -22,6 +22,7 @@ const UNDERLINE_OFF: &str = "\x1b[24m";
 #[allow(dead_code)]
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
+const BLUE: &str = "\x1b[34m";
 const WHITE: &str = "\x1b[37m";
 const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
@@ -284,6 +285,61 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            element!("pron", {
+                move |el| {
+                    el.before(&format!("{}{}", BOLD_ON, WHITE), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === <block-title>: Bold Blue ===
+            element!("block-title", {
+                move |el| {
+                    el.before(&format!("{}{}", BOLD_ON, BLUE), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === <lb> Label: Italic ===
+            element!("lb", {
+                move |el| {
+                    el.before(ITALIC_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Clean up structural tags (remove tags, keep text content) ===
+            element!("subentry, exmplgrp, exmplunit, exmpl-start, exmpl", {
+                move |el| {
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // I've also added these to clean up the rest of the raw tags in your output:
+            element!(
+                "prongrp, pronunit, container, etym, subentryblk, inflgrp, influnit, infl",
+                {
+                    move |el| {
+                        el.remove_and_keep_content();
+                        Ok(())
+                    }
+                }
+            ),
             // <xrhw> cross-reference headword: green
             element!("xrhw", {
                 move |el| {
