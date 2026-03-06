@@ -241,7 +241,9 @@ pub fn render_html_to_terminal(html: &str) -> String {
         .replace('\x1b', "")
         .replace('\u{9B}', "")
         .replace("</img>", "")
-        .replace("</font>", "");
+        .replace("</font>", "")
+        .replace("</i>", "")
+        .replace("</div>", "");
     let result = RefCell::new(String::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
     let sensecat_depth = std::rc::Rc::new(std::cell::RefCell::new(0));
@@ -326,6 +328,146 @@ pub fn render_html_to_terminal(html: &str) -> String {
                         end.remove();
                         Ok(())
                     });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Remove duplicate/noisy elements entirely ===
+            element!(
+                ".hyphenation.frequent, .popetymology, .popverbs, .popcolloheader",
+                {
+                    move |el| {
+                        // This kills the duplicate headword, the ALL CAPS duplicates,
+                        // and completely silences the multiple <table> tags.
+                        el.remove();
+                        Ok(())
+                    }
+                }
+            ),
+            // === Longman: Popup buttons (Etymology, Verb Table, Collocations) ===
+            element!(".popup-button", {
+                move |el| {
+                    // Start each section on a fresh line
+                    el.before("\n", ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Etymology Formatting ===
+            element!(".at-link .hyphenation", {
+                move |el| {
+                    el.before(" ", ContentType::Text); // Add space before "render"
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            element!(".etymology", {
+                move |el| {
+                    // Inject comma, space, and Yellow ANSI code
+                    el.before(&format!(", {}", YELLOW), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(COLOR_RESET, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Verb Table Formatting ===
+            element!(".lemma", {
+                move |el| {
+                    el.before(" ", ContentType::Text); // Space before "render"
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            element!(".verbtable", {
+                move |el| {
+                    push_end_tag_handler!(el, |end| {
+                        // Print ": not shown" exactly ONCE at the end of the line
+                        end.before(": not shown", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Etymology Date (Yellow) ===
+            element!(".etymdate", {
+                move |el| {
+                    el.before(YELLOW, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(COLOR_RESET, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Etymology Origin (Italic) ===
+            element!(".etymorigin", {
+                move |el| {
+                    el.before(ITALIC_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Verb Tables (Hide entire table, print stub) ===
+            element!("table", {
+                move |el| {
+                    el.remove(); // Silently delete the tables and ALL text inside them
+                    Ok(())
+                }
+            }),
+            // === Longman: Sense Spacing Fixes ===
+            element!(".signpost", {
+                move |el| {
+                    // Add a space before and after the ALL CAPS signpost
+                    // so it doesn't fuse with the number or definition
+                    el.before(" ", ContentType::Text);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(" ", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Force newline before .sense tags (like "1 CAUSE TO BECOME") ===
+            element!("span.sense.newline", {
+                move |el| {
+                    el.before("\n", ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman: Force newline after registerlab (e.g. "formal") ===
+            element!(".registerlab", {
+                move |el| {
+                    push_end_tag_handler!(el, |end| {
+                        // We check if it's the main header one by ensuring it breaks to a new line
+                        // Note: Because registerlab is used inline later, we might just add a simple space
+                        // But since you asked for a newline after "formal", we can drop it in.
+                        end.before("\n", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Longman cleanup: Remove buttons/scripts leaking text ===
+            element!(".tail, .colloheader", {
+                move |el| {
                     el.remove_and_keep_content();
                     Ok(())
                 }
@@ -823,9 +965,23 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            // === Paragraphs & Block Elements ===
             element!("p, div, tr, section", {
                 let indent = &indent_level;
                 move |el| {
+                    // Skip adding block newlines for Longman inline-wrapper divs
+                    if let Some(class) = el.get_attribute("class") {
+                        if class.contains("lemma")
+                            || class.contains("etymology")
+                            || class.contains("verbtable")
+                            || class.contains("at-link")
+                            || class.contains("content")
+                        {
+                            el.remove_and_keep_content();
+                            return Ok(());
+                        }
+                    }
+
                     let indent2 = indent.clone();
                     push_end_tag_handler!(el, move |end| {
                         let level = *indent2.borrow();
