@@ -178,7 +178,7 @@ fn color_to_ansi(color: &str) -> Option<String> {
 /// - `<d>` → yellow (date), `<ch>` → bold (author), `<qt>` → italic (quote)
 /// - `<ph>` → green (phonetic), `<hw>` → bold+underline (headword)
 /// - `<ls>` → bold (sense label), `<w>` → dim (abbreviation)
-/// - `<spg>` → dim (spelling group), `<dg>` → newline (etymology)
+/// - `<spg>` → dim (spelling group), `<dg>` → etymology
 ///
 /// Other dictionaries:
 /// - `<com>` → passthrough (Webster comments/metadata)
@@ -293,32 +293,32 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // <se4> definition/sense block: indent only (OED source has line breaks between blocks)
+            // <se4> definition/sense block: newline + indent
             element!("se4", {
                 let indent = &indent_level;
                 move |el| {
                     *indent.borrow_mut() = 4;
-                    el.before(SE4_INDENT, ContentType::Text);
+                    el.before(&format!("\n{}", SE4_INDENT), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-            // <se8> quotation block: indent only (OED source has line breaks between blocks)
+            // <se8> quotation block: newline + deeper indent
             element!("se8", {
                 let indent = &indent_level;
                 move |el| {
                     *indent.borrow_mut() = 8;
-                    el.before(SE8_INDENT, ContentType::Text);
+                    el.before(&format!("\n{}", SE8_INDENT), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
             }),
-            // <q> individual quotation: indent only
+            // <q> individual quotation: newline + current indent
             element!("q", {
                 let indent = &indent_level;
                 move |el| {
                     let level = *indent.borrow();
-                    el.before(indent_str(level), ContentType::Text);
+                    el.before(&format!("\n{}", indent_str(level)), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
@@ -330,10 +330,10 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // <spg> spelling/forms group: dim text
+            // <spg> spelling/forms group: newline, dim text
             element!("spg", {
                 move |el| {
-                    el.before(DIM, ContentType::Html);
+                    el.before(&format!("\n{}", DIM), ContentType::Html);
                     push_end_tag_handler!(el, |end| {
                         end.before(DIM_OFF, ContentType::Html);
                         end.remove();
@@ -343,9 +343,10 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // <dg> definition/etymology group
+            // <dg> definition/etymology group: newline before
             element!("dg", {
                 move |el| {
+                    el.before("\n", ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
@@ -611,31 +612,52 @@ pub fn render_html_to_terminal(html: &str) -> String {
     let raw = result.into_inner();
 
     // Post-process:
-    // - Replace &nbsp; with space (lol_html passes entities through as-is)
-    // - Strip \r
-    // - Strip leading tabs after newlines (from OED source indentation)
-    // - Condense 3+ consecutive newlines into 2
+    // 1. Replace &nbsp; with space (lol_html passes entities through as-is)
+    // 2. Strip OED source formatting: \r\n\t sequences (inter-tag whitespace)
+    //    OED raw HTML uses \r\n\t between block-level tags for source readability.
+    //    Our handlers provide the actual structural newlines + indentation,
+    //    so these source sequences are noise that would cause double blank lines.
+    //    We strip them by removing \r always, and removing \n only when followed by \t.
+    //    Standalone \n (without following \t) is preserved — it's from <br> or other content.
+    // 3. Condense 3+ consecutive newlines into 2.
     let raw = raw.replace("&nbsp;", " ");
+    let chars: Vec<char> = raw.chars().collect();
+    let len = chars.len();
 
     let mut cleaned = String::with_capacity(raw.len());
     let mut newline_count = 0u32;
-    for ch in raw.chars() {
-        if ch == '\n' {
-            newline_count += 1;
-            if newline_count <= 2 {
-                cleaned.push(ch);
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        match ch {
+            '\r' => {
+                // Always skip \r
+                i += 1;
             }
-        } else if ch == '\r' {
-            // Skip \r (from \r\n in the raw data)
-            continue;
-        } else if ch == '\t' && newline_count > 0 {
-            // Tab after newline is from the original OED HTML source indentation — skip it
-            // (our element handlers apply proper indentation for OED;
-            //  Webster uses &nbsp; which is already converted to spaces above)
-            continue;
-        } else {
-            newline_count = 0;
-            cleaned.push(ch);
+            '\n' => {
+                // Check if this \n is followed by \t (OED source inter-tag whitespace)
+                // If so, skip the entire \n\t+ sequence
+                let mut j = i + 1;
+                while j < len && chars[j] == '\t' {
+                    j += 1;
+                }
+                if j > i + 1 {
+                    // Found \n followed by one or more \t — this is OED source formatting, skip it
+                    i = j;
+                } else {
+                    // Standalone \n (from <br>, handlers, or actual content)
+                    newline_count += 1;
+                    if newline_count <= 2 {
+                        cleaned.push('\n');
+                    }
+                    i += 1;
+                }
+            }
+            _ => {
+                newline_count = 0;
+                cleaned.push(ch);
+                i += 1;
+            }
         }
     }
 
