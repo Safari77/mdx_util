@@ -253,6 +253,46 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            // === Headers: h1, h2, h3 ===
+            element!("h1, h2, h3", {
+                move |el| {
+                    el.before(BOLD_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(BOLD_OFF, ContentType::Html);
+                        end.before("\n", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Dictionary Sense: <sense> ===
+            element!("sense", {
+                move |el| {
+                    el.before(&format!("{}{}", BOLD_ON, YELLOW), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Word Detail Class: .wordDetail ===
+            element!(".wordDetail", {
+                move |el| {
+                    el.before(DIM, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(DIM_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
             // === Strip <script> and all content inside ===
             element!("script", {
                 move |el| {
@@ -649,7 +689,7 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            element!("p, div, tr", {
+            element!("p, div, tr, section", {
                 let indent = &indent_level;
                 move |el| {
                     let indent2 = indent.clone();
