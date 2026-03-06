@@ -241,6 +241,7 @@ pub fn render_html_to_terminal(html: &str) -> String {
     let result = RefCell::new(String::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
     let sensecat_depth = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let list_counters = std::rc::Rc::new(std::cell::RefCell::new(Vec::<usize>::new()));
 
     fn indent_str(level: u8) -> &'static str {
         match level {
@@ -818,6 +819,80 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            // === Ordered Lists: <ol> ===
+            element!("ol", {
+                let counters = std::rc::Rc::clone(&list_counters);
+                move |el| {
+                    counters.borrow_mut().push(1);
+                    el.before("\n", ContentType::Text);
+
+                    let counters_end = std::rc::Rc::clone(&counters);
+                    push_end_tag_handler!(el, move |end| {
+                        counters_end.borrow_mut().pop();
+                        // Add a newline when the list closes to separate following content
+                        end.before("\n", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Unordered Lists: <ul> ===
+            element!("ul", {
+                move |el| {
+                    el.before("\n", ContentType::Text);
+                    push_end_tag_handler!(el, |end| {
+                        // Add a newline when the list closes
+                        end.before("\n", ContentType::Text);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === List Items: <li> ===
+            element!("li", {
+                let counters = std::rc::Rc::clone(&list_counters);
+                move |el| {
+                    let mut b_counters = counters.borrow_mut();
+                    // If we are inside an <ol>, get the number and increment it.
+                    // If we are inside a <ul> (or missing <ol>), fallback to a bullet point.
+                    let prefix = if let Some(last) = b_counters.last_mut() {
+                        let n = *last;
+                        *last += 1;
+                        format!("\n{} ", n)
+                    } else {
+                        "\n• ".to_string()
+                    };
+
+                    el.before(&prefix, ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Part of Speech: <pos> tag or class="pos" ===
+            element!("pos, .pos", {
+                move |el| {
+                    // Prepending a space fixes the missing gap after the pronunciation
+                    el.before(&format!(" {}", ITALIC_ON), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Chambers structural tags ===
+            element!("cb13, cb13_entry, m_entry, mwe", {
+                move |el| {
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
             element!("td", {
                 move |el| {
                     el.before("\t", ContentType::Text);
@@ -854,16 +929,9 @@ pub fn render_html_to_terminal(html: &str) -> String {
             // OED4: phon, gbl, gbr, n, c, cw, hg, idg, see, cnt
             // Webster: com
             // Translation: trn
-            // Lists: ul, ol, li
             // Collins: superentry, entry, hwblk, hwgrp, hwunit, datablk,
             //          gramcat, pospgrp, pospunit, sensecat, defgrp, defunit
             element!("phon, gbl, gbr, n, c, cw, hg, idg, see, cnt, com, trn", {
-                move |el| {
-                    el.remove_and_keep_content();
-                    Ok(())
-                }
-            }),
-            element!("ul, ol, li", {
                 move |el| {
                     el.remove_and_keep_content();
                     Ok(())
