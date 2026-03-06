@@ -237,7 +237,11 @@ fn extract_style_property<'a>(style: &'a str, property: &str) -> Option<&'a str>
 pub fn render_html_to_terminal(html: &str) -> String {
     // 1. Pre-sanitize: Remove literal terminal escapes to prevent raw injection
     // \x1b is standard ESC, \u{9B} is 8-bit CSI
-    let safe_html = html.replace('\x1b', "").replace('\u{9B}', "");
+    let safe_html = html
+        .replace('\x1b', "")
+        .replace('\u{9B}', "")
+        .replace("</img>", "")
+        .replace("</font>", "");
     let result = RefCell::new(String::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
     let sensecat_depth = std::rc::Rc::new(std::cell::RefCell::new(0));
