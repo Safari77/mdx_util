@@ -278,10 +278,11 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // <sense-num>: bold white
-            element!("sense-num", {
+            // === Sense Numbers: <sense-num> or class="sensenum" ===
+            element!("sense-num, .sensenum", {
                 move |el| {
-                    el.before(&format!("{}{}", BOLD_ON, WHITE), ContentType::Html);
+                    // Added \n here to force a linefeed before the number
+                    el.before(&format!("\n{}{}", BOLD_ON, WHITE), ContentType::Html);
                     push_end_tag_handler!(el, |end| {
                         end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
                         end.remove();
