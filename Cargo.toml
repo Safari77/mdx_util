@@ -61,7 +61,7 @@ colored = "3.0"
 tantivy = "0.25"
 
 # HTML processing
-lol_html = "2.6"
+lol_html = "2.7"
 
 # Archive handling (for MDD packaging)
 zip = { version = "8", default-features = false, features = ["deflate", "deflate64"] }
