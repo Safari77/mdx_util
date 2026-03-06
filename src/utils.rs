@@ -21,6 +21,8 @@ const UNDERLINE_ON: &str = "\x1b[4m";
 const UNDERLINE_OFF: &str = "\x1b[24m";
 #[allow(dead_code)]
 const RED: &str = "\x1b[31m";
+const LIGHT_BLUE: &str = "\x1b[94m";
+const ORANGE: &str = "\x1b[38;2;255;165;0m"; // Truecolor orange
 const GREEN: &str = "\x1b[32m";
 const BLUE: &str = "\x1b[34m";
 const WHITE: &str = "\x1b[37m";
@@ -302,6 +304,65 @@ pub fn render_html_to_terminal(html: &str) -> String {
                         end.remove();
                         Ok(())
                     });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: <qz> Regional/grammar notes (Italic) ===
+            element!("qz", {
+                move |el| {
+                    el.before(ITALIC_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: <z> Collocation item (Newline + 2 spaces) ===
+            element!("z", {
+                move |el| {
+                    el.before("\n  ", ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: <rq> Example sentence (Newline + 4 spaces + Light Blue + Italic) ===
+            element!("rq", {
+                move |el| {
+                    // Inject 4 spaces, then turn on Light Blue and Italics
+                    el.before(
+                        &format!("\n    {}{}", LIGHT_BLUE, ITALIC_ON),
+                        ContentType::Html,
+                    );
+                    push_end_tag_handler!(el, |end| {
+                        // Turn off Italics and reset color
+                        end.before(&format!("{}{}", ITALIC_OFF, COLOR_RESET), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: <vtc> Category Header (Newline + Bold Orange) ===
+            element!("vtc", {
+                move |el| {
+                    el.before(&format!("\n{}{}", BOLD_ON, ORANGE), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: Clean up remaining structural tags ===
+            element!("wh, uh, ue, uey, vto, vt, qkz, co, sa, sac", {
+                move |el| {
                     el.remove_and_keep_content();
                     Ok(())
                 }
