@@ -22,6 +22,7 @@ const UNDERLINE_OFF: &str = "\x1b[24m";
 #[allow(dead_code)]
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
+const WHITE: &str = "\x1b[37m";
 const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
 const DIM: &str = "\x1b[2m";
@@ -266,6 +267,60 @@ pub fn render_html_to_terminal(html: &str) -> String {
                         end.remove();
                         Ok(())
                     });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // <sense-num>: bold white
+            element!("sense-num", {
+                move |el| {
+                    el.before(&format!("{}{}", BOLD_ON, WHITE), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(&format!("{}{}", COLOR_RESET, BOLD_OFF), ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // <xrhw> cross-reference headword: green
+            element!("xrhw", {
+                move |el| {
+                    el.before(GREEN, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(COLOR_RESET, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // <var> variant: cyan
+            element!("var", {
+                move |el| {
+                    el.before(CYAN, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(COLOR_RESET, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // <vargrp> variant group: newline before, keep content
+            element!("vargrp", {
+                move |el| {
+                    el.before("\n", ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Passthrough structural tags (remove tags, keep content) ===
+            element!("xrefgrp, groupintro, xrefunit, xref, varunit", {
+                move |el| {
                     el.remove_and_keep_content();
                     Ok(())
                 }
