@@ -65,6 +65,7 @@ lol_html = "2.7"
 
 # Archive handling (for MDD packaging)
 zip = { version = "8", default-features = false, features = ["deflate", "deflate64"] }
+html-escape = "0.2"
 
 [profile.release]
 opt-level = 3

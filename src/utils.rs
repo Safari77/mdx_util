@@ -233,7 +233,10 @@ fn extract_style_property<'a>(style: &'a str, property: &str) -> Option<&'a str>
 /// Works with any dictionary format — handles both standard HTML tags and
 /// dictionary-specific custom tags (OED4, Webster, Collins, etc.) without configuration.
 pub fn render_html_to_terminal(html: &str) -> String {
-    let result = RefCell::new(String::with_capacity(html.len()));
+    // 1. Pre-sanitize: Remove literal terminal escapes to prevent raw injection
+    // \x1b is standard ESC, \u{9B} is 8-bit CSI
+    let safe_html = html.replace('\x1b', "").replace('\u{9B}', "");
+    let result = RefCell::new(String::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
 
     fn indent_str(level: u8) -> &'static str {
@@ -817,7 +820,7 @@ pub fn render_html_to_terminal(html: &str) -> String {
         }
     });
 
-    if let Err(e) = rewriter.write(html.as_bytes()) {
+    if let Err(e) = rewriter.write(safe_html.as_bytes()) {
         eprintln!("HTML render error: {}", e);
     }
     if let Err(e) = rewriter.end() {
@@ -830,7 +833,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
     // 1. Replace &nbsp; with space (lol_html passes entities through as-is)
     // 2. Strip OED source formatting: \n followed by \t (inter-tag whitespace)
     // 3. Condense 3+ consecutive newlines into 2.
-    let raw = raw.replace("&nbsp;", " ");
     let chars: Vec<char> = raw.chars().collect();
     let len = chars.len();
 
@@ -840,6 +842,60 @@ pub fn render_html_to_terminal(html: &str) -> String {
     while i < len {
         let ch = chars[i];
         match ch {
+            '&' => {
+                let mut j = i + 1;
+                let mut found_semi = false;
+                // Lookahead up to 15 chars to find the closing ';'
+                while j < len && j - i < 15 {
+                    if chars[j] == ';' {
+                        found_semi = true;
+                        break;
+                    }
+                    if chars[j].is_whitespace() || chars[j] == '&' {
+                        break; // Invalid entity structure
+                    }
+                    j += 1;
+                }
+
+                if found_semi {
+                    let entity: String = chars[i..=j].iter().collect();
+                    let decoded = html_escape::decode_html_entities(&entity);
+
+                    // SECURE FILTER: block C0 controls (< 0x20 except tab/nl/cr), DEL (0x7F),
+                    // and C1 controls (0x80-0x9F, which includes 8-bit terminal escapes).
+                    let has_control = decoded.chars().any(|c| {
+                        let cp = c as u32;
+                        (cp < 0x20 && cp != 0x09 && cp != 0x0A && cp != 0x0D)
+                            || cp == 0x7F
+                            || (cp >= 0x80 && cp <= 0x9F)
+                    });
+
+                    if has_control {
+                        // Malicious entity detected (e.g., &#x1B;): delete it by skipping it
+                        i = j + 1;
+                        continue;
+                    } else {
+                        // Safe entity: push characters to output
+                        for mut dc in decoded.chars() {
+                            // Translate non-breaking spaces to standard spaces
+                            if dc == '\u{A0}' {
+                                dc = ' ';
+                            }
+                            cleaned.push(dc);
+                            if dc != '\n' && dc != '\r' {
+                                newline_count = 0;
+                            }
+                        }
+                        i = j + 1;
+                        continue;
+                    }
+                } else {
+                    // False alarm, just push the '&'
+                    cleaned.push(ch);
+                    newline_count = 0;
+                    i += 1;
+                }
+            }
             '\r' => {
                 i += 1;
             }
