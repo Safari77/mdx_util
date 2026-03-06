@@ -1129,6 +1129,25 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     i += 1;
                 }
             }
+            ' ' | '\t' => {
+                // Look ahead to see if these spaces are just trailing before a newline
+                let mut j = i;
+                while j < len && (chars[j] == ' ' || chars[j] == '\t') {
+                    j += 1;
+                }
+
+                // If the spaces lead straight into a newline (or end of file),
+                // skip them so they don't reset our newline_count condenser!
+                if j == len || chars[j] == '\n' || chars[j] == '\r' {
+                    i = j;
+                    continue;
+                }
+
+                // Otherwise, it's a normal space inside a sentence
+                newline_count = 0;
+                cleaned.push(ch);
+                i += 1;
+            }
             _ => {
                 newline_count = 0;
                 cleaned.push(ch);
