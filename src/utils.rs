@@ -240,6 +240,7 @@ pub fn render_html_to_terminal(html: &str) -> String {
     let safe_html = html.replace('\x1b', "").replace('\u{9B}', "");
     let result = RefCell::new(String::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
+    let sensecat_depth = std::rc::Rc::new(std::cell::RefCell::new(0));
 
     fn indent_str(level: u8) -> &'static str {
         match level {
@@ -895,10 +896,25 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // <sensecat> sense: add newline before for new definition line
+            // === Sense Categories: track nesting for indentation ===
             element!("sensecat", {
+                let depth = std::rc::Rc::clone(&sensecat_depth);
                 move |el| {
-                    el.before("\n", ContentType::Text);
+                    // Indent 4 spaces per depth level (0 spaces for main senses, 4 for sub-senses)
+                    let indent_str = "    ".repeat(*depth.borrow());
+                    el.before(&format!("\n{}", indent_str), ContentType::Text);
+
+                    // Increase depth for any tags nested inside this one
+                    *depth.borrow_mut() += 1;
+
+                    let depth_end = std::rc::Rc::clone(&depth);
+                    push_end_tag_handler!(el, move |end| {
+                        // Decrease depth when we exit the tag
+                        *depth_end.borrow_mut() -= 1;
+                        end.remove();
+                        Ok(())
+                    });
+
                     el.remove_and_keep_content();
                     Ok(())
                 }
