@@ -329,6 +329,19 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            // === Subscript: <sub> -> Bold ===
+            element!("sub", {
+                move |el| {
+                    el.before(BOLD_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(BOLD_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
             // === Clean up structural tags (remove tags, keep text content) ===
             element!("subentry, exmplgrp, exmplunit, exmpl-start, exmpl", {
                 move |el| {
