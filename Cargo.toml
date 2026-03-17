@@ -25,7 +25,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core MDX/MDD file handling
-mdx = { path = "../mdx", default-features = false }
+mdx = { git = "https://github.com/Safari77/mdx", default-features = false }
+lol_html = "2.7"
 
 # CLI argument parsing
 clap = { version = "4.5", features = ["derive"] }
@@ -59,9 +60,6 @@ colored = "3.0"
 
 # Full-text search
 tantivy = "0.25"
-
-# HTML processing
-lol_html = "2.7"
 
 # Archive handling (for MDD packaging)
 zip = { version = "8", default-features = false, features = ["deflate", "deflate64"] }
