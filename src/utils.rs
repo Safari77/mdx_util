@@ -34,7 +34,9 @@ const COLOR_RESET: &str = "\x1b[39m";
 const RESET_ALL: &str = "\x1b[0m";
 
 // Indentation for se4 (definition sense) and se8 (quotation) blocks
+const SE2_INDENT: &str = " ";
 const SE4_INDENT: &str = "  ";
+const SE6_INDENT: &str = "   ";
 const SE8_INDENT: &str = "    ";
 
 // Assumed dark terminal background for contrast calculation (roughly #1e1e1e)
@@ -254,7 +256,9 @@ pub fn render_html_to_terminal(html: &str) -> String {
     fn indent_str(level: u8) -> &'static str {
         match level {
             8 => SE8_INDENT,
+            6 => SE6_INDENT,
             4 => SE4_INDENT,
+            2 => SE2_INDENT,
             _ => "",
         }
     }
@@ -763,11 +767,29 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
+            element!("se2", {
+                let indent = &indent_level;
+                move |el| {
+                    *indent.borrow_mut() = 2;
+                    el.before(&format!("\n{}", SE2_INDENT), ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
             element!("se4", {
                 let indent = &indent_level;
                 move |el| {
                     *indent.borrow_mut() = 4;
                     el.before(&format!("\n{}", SE4_INDENT), ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            element!("se6", {
+                let indent = &indent_level;
+                move |el| {
+                    *indent.borrow_mut() = 6;
+                    el.before(&format!("\n{}", SE6_INDENT), ContentType::Text);
                     el.remove_and_keep_content();
                     Ok(())
                 }
