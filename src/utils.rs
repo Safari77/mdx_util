@@ -364,8 +364,58 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 }
             }),
-            // === Oxford Collocations: Clean up remaining structural tags ===
-            element!("wh, uh, ue, uey, vto, vt, qkz, co, sa, sac", {
+            // === Oxford Collocations: Headword ===
+            element!("wh", {
+                move |el| {
+                    el.before(BOLD_ON, ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(BOLD_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: Primary Part of Speech ===
+            element!("ue", {
+                move |el| {
+                    // Add a space before to prevent "boatnoun"
+                    el.before(&format!(" {}", ITALIC_ON), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: Section Part of Speech ===
+            element!("uey", {
+                move |el| {
+                    // Force onto a new line
+                    el.before(&format!("\n{}", ITALIC_ON), ContentType::Html);
+                    push_end_tag_handler!(el, |end| {
+                        end.before(ITALIC_OFF, ContentType::Html);
+                        end.remove();
+                        Ok(())
+                    });
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: Category Menu (e.g. ADJECTIVE | VERB) ===
+            element!("vto", {
+                move |el| {
+                    // Force the menu onto a new line
+                    el.before("\n", ContentType::Text);
+                    el.remove_and_keep_content();
+                    Ok(())
+                }
+            }),
+            // === Oxford Collocations: Clean up remaining silent structural tags ===
+            element!("uh, vt, qkz, co, sa, sac", {
                 move |el| {
                     el.remove_and_keep_content();
                     Ok(())
