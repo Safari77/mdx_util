@@ -138,7 +138,7 @@ pub fn run_test_db(
     if target.is_dir() {
         println!("Check Directory: {}", target.display());
         let dir_url = Url::from_directory_path(&target)
-            .map_err(|()| mdx::ZdbError::invalid_path(format!("{}", &target.display())))?;
+            .map_err(|()| mdx::ZdbError::invalid_path(format!("{}", target.display())))?;
         let target_path = mdx::utils::io_utils::fix_windows_path_buf(get_decoded_path(&dir_url)?);
 
         // Scan an MDX file
