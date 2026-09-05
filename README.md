@@ -133,7 +133,7 @@ Reg code for end user: [hex_encoded_reg_code]
 
 ### Prerequisites
 - Rust 1.70+ (with Cargo)
-- The [mdx](https://github.com/raymanzhang/mdx) library (as a dependency)
+- The [mdx](https://github.com/Safari77/mdx) library (as a dependency)
 
 ### Build from Source
 ```bash
@@ -233,8 +233,7 @@ GNU Affero General Public License v3.0 (AGPL-3.0)
 
 ## Author
 
-Rayman Zhang
+Original author Rayman Zhang. New features by Sami Farin.
 
-## Contributing
-
-For issues or contributions, refer to the main [mdx](https://github.com/raymanzhang/mdx) project repository.
+## Screenshot
+![Screenshot](screenshot.png)
