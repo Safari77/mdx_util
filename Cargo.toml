@@ -8,7 +8,6 @@ description = "A comprehensive CLI tool for working with MDict (.mdx/.mdd) forma
 repository = "https://github.com/Safari77/mdx_util"
 keywords = ["mdict", "mdx", "mdd", "dictionary", "cli"]
 categories = ["command-line-utilities", "encoding"]
-readme = "README.md"
 publish = false
 
 [features]
