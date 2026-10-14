@@ -61,7 +61,7 @@ tantivy = "0.26"
 
 # Archive handling (for MDD packaging)
 zip = { version = "9", default-features = false, features = ["deflate", "deflate64"] }
-html-escape = "0.2"
+html-escape = "0.3"
 
 [profile.release]
 opt-level = 3
