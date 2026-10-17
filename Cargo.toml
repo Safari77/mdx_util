@@ -57,7 +57,7 @@ once_cell = "1.21"
 colored = "3.0"
 
 # Full-text search
-tantivy = "0.26"
+tantivy = "0.27"
 
 # Archive handling (for MDD packaging)
 zip = { version = "9", default-features = false, features = ["deflate", "deflate64"] }
