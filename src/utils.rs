@@ -4,6 +4,66 @@ use std::path::{Path, PathBuf};
 use lol_html::html_content::ContentType;
 use lol_html::{EndTagHandler, HtmlRewriter, Settings, comments, doc_comments, element, text};
 
+/// Prints to stdout with a newline, returning early with `Ok(())` if the pipe is closed.
+#[macro_export]
+macro_rules! safe_println {
+    () => {{
+        use ::std::io::Write as _;
+        if let ::std::result::Result::Err(e) = ::std::writeln!(::std::io::stdout()) {
+            if e.kind() == ::std::io::ErrorKind::BrokenPipe {
+                return ::std::result::Result::Ok(());
+            }
+            return ::std::result::Result::Err(e.into());
+        }
+    }};
+    ($($arg:tt)*) => {{
+        use ::std::io::Write as _;
+        if let ::std::result::Result::Err(e) = ::std::writeln!(::std::io::stdout(), $($arg)*) {
+            if e.kind() == ::std::io::ErrorKind::BrokenPipe {
+                return ::std::result::Result::Ok(());
+            }
+            return ::std::result::Result::Err(e.into());
+        }
+    }};
+}
+
+/// Prints to stdout without a newline, returning early with `Ok(())` on broken pipe.
+#[macro_export]
+macro_rules! safe_print {
+    ($($arg:tt)*) => {{
+        use ::std::io::Write as _;
+        if let ::std::result::Result::Err(e) = ::std::write!(::std::io::stdout(), $($arg)*) {
+            if e.kind() == ::std::io::ErrorKind::BrokenPipe {
+                return ::std::result::Result::Ok(());
+            }
+            return ::std::result::Result::Err(e.into());
+        }
+    }};
+}
+
+/// Writes to any destination (such as a locked `io::StdoutLock`), returning early with `Ok(())` on broken pipe.
+#[macro_export]
+macro_rules! safe_writeln {
+    ($dst:expr) => {{
+        use ::std::io::Write as _;
+        if let ::std::result::Result::Err(e) = ::std::writeln!($dst) {
+            if e.kind() == ::std::io::ErrorKind::BrokenPipe {
+                return ::std::result::Result::Ok(());
+            }
+            return ::std::result::Result::Err(e.into());
+        }
+    }};
+    ($dst:expr, $($arg:tt)*) => {{
+        use ::std::io::Write as _;
+        if let ::std::result::Result::Err(e) = ::std::writeln!($dst, $($arg)*) {
+            if e.kind() == ::std::io::ErrorKind::BrokenPipe {
+                return ::std::result::Result::Ok(());
+            }
+            return ::std::result::Result::Err(e.into());
+        }
+    }};
+}
+
 /// Converts a potentially relative path into an absolute path so `url::Url::from_file_path` succeeds.
 pub fn to_absolute_path(path: &Path) -> mdx::Result<PathBuf> {
     if path.is_absolute() {

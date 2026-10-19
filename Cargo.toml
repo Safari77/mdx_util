@@ -25,6 +25,7 @@ path = "src/main.rs"
 # Core MDX/MDD file handling
 mdx = { git = "https://github.com/Safari77/mdx", default-features = false }
 lol_html = "3"
+libc = "0.2"
 
 # CLI argument parsing
 clap = { version = "4.6", features = ["derive"] }

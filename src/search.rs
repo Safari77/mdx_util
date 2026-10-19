@@ -8,6 +8,7 @@ use mdx::Result;
 use mdx::readers::MdxReader;
 use mdx::readers::ZdbReader;
 
+use crate::safe_println;
 use crate::utils;
 
 // 简化的搜索函数 - ZDB
@@ -30,7 +31,7 @@ pub fn search_zdb(
     match zdb.find_first_match(key, start_with_match, partial_match, true) {
         Ok(Some(index)) => {
             // Display main entry
-            println!("Found: '{}' at {} ", index.key, index.entry_no);
+            safe_println!("Found: '{}' at {} ", index.key, index.entry_no);
 
             let is_binary = zdb.is_binary_content();
             let indexes = zdb.get_indexes(index.entry_no, 10)?;
@@ -38,7 +39,7 @@ pub fn search_zdb(
                 let content_bytes = zdb.get_data(entry_index, true)?;
                 let byte_size = content_bytes.len();
 
-                println!(
+                safe_println!(
                     "  {}: '{}' at {} - Size: {} bytes",
                     i + 1,
                     entry_index.key,
@@ -48,11 +49,11 @@ pub fn search_zdb(
 
                 if preview {
                     if is_binary {
-                        println!("     Preview: [Binary content ({byte_size} bytes)]");
+                        safe_println!("     Preview: [Binary content ({byte_size} bytes)]");
                     } else {
                         let content = String::from_utf8_lossy(&content_bytes);
                         let text_content = mdx::utils::extract_text_from_html(&content)?;
-                        println!("     Preview: {}", utils::take_chars(&text_content, 1000));
+                        safe_println!("     Preview: {}", utils::take_chars(&text_content, 1000));
                     }
                 }
             }
@@ -92,12 +93,12 @@ pub fn search_mdx_db(
     match mdx_reader.find_index(key, start_with_match, partial_match, true) {
         Ok(Some(key_index)) => {
             // Display main entry
-            println!("Found: '{}' at {} ", key_index.key, key_index.entry_no);
+            safe_println!("Found: '{}' at {} ", key_index.key, key_index.entry_no);
 
             let indexes = mdx_reader.get_indexes(key_index.entry_no, 10)?;
             for (i, entry_index) in indexes.iter().enumerate() {
                 let content = mdx_reader.get_html(entry_index)?;
-                println!(
+                safe_println!(
                     "  {}: '{}' at {} - Size: {} bytes",
                     i + 1,
                     entry_index.key,
@@ -106,7 +107,7 @@ pub fn search_mdx_db(
                 );
                 if preview {
                     let text_content = mdx::utils::utils::html_to_text(&content);
-                    println!("     Preview: {}", utils::take_chars(&text_content, 1000));
+                    safe_println!("     Preview: {}", utils::take_chars(&text_content, 1000));
                 }
             }
             Ok(())
