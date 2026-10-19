@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use log::{LevelFilter, error};
 
 use mdx::Result;
@@ -17,18 +17,24 @@ mod search;
 mod test_db;
 mod utils;
 
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbMode {
+    Zdb,
+    Mdx,
+}
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "mdx_util",
-    author = "Rayman Zhang",
-    version = "1.0.0",
+    author,
+    version,
     about = "A comprehensive testing tool for MDX/ZDB database files",
-    long_about = "mdx_util is a command-line tool for testing and analyzing MDX and ZDB database files. 
+    long_about = "mdx_util is a command-line tool for testing and analyzing MDX and ZDB database files. \
 It supports database dumping, keyword searching, index creation, and full-text search capabilities.",
     after_help = "Examples:
   mdx_util test --mode mdx --count 100 /path/to/mdx/files
   mdx_util convert-db /path/to/config.json
-  mdx_util search /path/to/file.mdx \"keyword\"
+  mdx_util list /path/to/file.mdx \"keyword\"
   mdx_util create-index /path/to/file.mdx
   mdx_util fts-search /path/to/file.mdx \"search term\" "
 )]
@@ -60,11 +66,12 @@ enum Commands {
         /// Mode for testing (zdb or mdx)
         #[arg(
             long,
+            value_enum,
             value_name = "MODE",
-            default_value = "zdb",
+            default_value_t = DbMode::Zdb,
             help = "Testing mode: zdb (single file) or mdx (mdx+mdd group)"
         )]
-        mode: String,
+        mode: DbMode,
 
         /// Number of entries to test (default: all entries)
         #[arg(long, value_name = "COUNT", help = "Limit the number of entries to test")]
@@ -97,19 +104,20 @@ enum Commands {
         name = "build-mdd",
         about = "Pack files in directory into MDD format",
         after_help = "Examples:
-  mdx_util build-mdd /path/to/directory"
+  mdx_util build-mdd /path/to/directory
+  mdx_util build-mdd /path/to/directory /path/to/out.mdd secret"
     )]
     BuildMdd {
         /// Path to directory containing files to pack
         #[arg(value_name = "DIR")]
         directory: String,
 
-        /// The target mdd file to build
-        #[arg(value_name = "FILE")]
+        /// The target mdd file to build (optional; defaults to <DIR>.mdd)
+        #[arg(value_name = "FILE", default_value = "")]
         file: String,
 
-        /// The password to use for the mdd file
-        #[arg(value_name = "PASSWORD")]
+        /// The password to use for the mdd file (optional)
+        #[arg(value_name = "PASSWORD", default_value = "")]
         password: String,
     },
 
@@ -131,8 +139,14 @@ enum Commands {
         keyword: String,
 
         /// Mode for searching (zdb or mdx)
-        #[arg(long, value_name = "MODE", default_value = "zdb", help = "Search mode: zdb or mdx")]
-        mode: String,
+        #[arg(
+            long,
+            value_enum,
+            value_name = "MODE",
+            default_value_t = DbMode::Zdb,
+            help = "Search mode: zdb or mdx"
+        )]
+        mode: DbMode,
 
         /// Show HTML->text preview of content
         #[arg(long, help = "Show HTML content converted to text preview")]
@@ -220,7 +234,7 @@ fn main() {
     } else if is_quiet {
         "warn".to_string()
     } else {
-        std::env::var("RUST_LOG").unwrap_or("info".to_string()).to_lowercase()
+        std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()).to_lowercase()
     };
 
     let level_filter = match log_level.as_str() {
@@ -232,10 +246,16 @@ fn main() {
         _ => LevelFilter::Info, // Default level
     };
     if let Err(e) = fern::Dispatch::new()
-        .format(|out, message, _record| out.finish(format_args!("{message}")))
+        .format(|out, message, record| {
+            if record.level() <= log::Level::Warn {
+                out.finish(format_args!("[{}] {message}", record.level()))
+            } else {
+                out.finish(format_args!("{message}"))
+            }
+        })
         .level(level_filter)
         .level_for("tantivy", LevelFilter::Warn)
-        .chain(std::io::stdout())
+        .chain(std::io::stderr())
         .apply()
     {
         eprintln!("Failed to initialize logger: {e}");
@@ -251,7 +271,7 @@ fn main() {
 fn run(args: &Args) -> Result<()> {
     match &args.command {
         Commands::Test { path, mode, count, random } => {
-            let mdx_mode = mode == "mdx";
+            let mdx_mode = *mode == DbMode::Mdx;
             run_test_db(path, mdx_mode, *count, *random)
         }
         Commands::ConvertDb { file, generate_config_only } => {
@@ -261,7 +281,7 @@ fn run(args: &Args) -> Result<()> {
             build_mdd::run_build_mdd(directory, password, file)
         }
         Commands::List { file, keyword, mode, preview, start_with_match, partial_match } => {
-            let mdx_mode = mode == "mdx";
+            let mdx_mode = *mode == DbMode::Mdx;
             run_search(file, keyword, mdx_mode, *preview, *start_with_match, *partial_match)
         }
         Commands::CreateIndex { file } => run_create_index(file),

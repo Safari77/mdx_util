@@ -1,11 +1,42 @@
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 
 use lol_html::html_content::ContentType;
 use lol_html::{EndTagHandler, HtmlRewriter, Settings, comments, doc_comments, element, text};
 
+/// Converts a potentially relative path into an absolute path so `url::Url::from_file_path` succeeds.
+pub fn to_absolute_path(path: &Path) -> mdx::Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(mdx::utils::io_utils::fix_windows_path_buf(path.to_path_buf()));
+    }
+    if let Ok(canon) = std::fs::canonicalize(path) {
+        return Ok(mdx::utils::io_utils::fix_windows_path_buf(canon));
+    }
+    let cwd = std::env::current_dir()?;
+    Ok(mdx::utils::io_utils::fix_windows_path_buf(cwd.join(path)))
+}
+
 pub fn take_chars(s: &str, n: usize) -> &str {
     let byte_end = s.char_indices().nth(n).map_or_else(|| s.len(), |(idx, _)| idx);
     &s[..byte_end]
+}
+
+/// Truncates a string containing ANSI SGR sequences to at most `max_chars` without splitting
+/// an escape sequence in half, and always appends `RESET_ALL` (`\x1b[0m`).
+pub fn truncate_ansi_safe(s: &str, max_chars: usize) -> String {
+    let sliced = take_chars(s, max_chars);
+    let safe_slice = if let Some(esc_pos) = sliced.rfind('\x1b') {
+        let tail = &sliced[esc_pos..];
+        // Complete CSI sequences end with an ASCII letter (like 'm')
+        if !tail.chars().skip(1).any(|c| c.is_ascii_alphabetic()) {
+            &sliced[..esc_pos]
+        } else {
+            sliced
+        }
+    } else {
+        sliced
+    };
+    format!("{safe_slice}{RESET_ALL}")
 }
 
 // ANSI escape codes — basic
@@ -20,6 +51,7 @@ const RED: &str = "\x1b[31m";
 const LIGHT_BLUE: &str = "\x1b[94m";
 const ORANGE: &str = "\x1b[38;2;255;165;0m"; // Truecolor orange
 const GREEN: &str = "\x1b[32m";
+const DARK_GREEN: &str = "\x1b[38;2;34;139;34m";
 const BLUE: &str = "\x1b[34m";
 const WHITE: &str = "\x1b[37m";
 const YELLOW: &str = "\x1b[33m";
@@ -189,8 +221,11 @@ fn parse_color_to_rgb(color: &str) -> Option<(u8, u8, u8)> {
         "burlywood" => (222, 184, 135),
         "wheat" => (245, 222, 179),
         _ => {
-            // Try hex
+            // Try hex (ensure ASCII before byte slicing to avoid UTF-8 boundary panics)
             let hex = lower.strip_prefix('#').unwrap_or(&lower);
+            if !hex.is_ascii() {
+                return None;
+            }
             return match hex.len() {
                 6 => {
                     let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
@@ -231,15 +266,12 @@ fn extract_style_property<'a>(style: &'a str, property: &str) -> Option<&'a str>
 /// Works with any dictionary format — handles both standard HTML tags and
 /// dictionary-specific custom tags (OED4, Webster, Collins, etc.) without configuration.
 pub fn render_html_to_terminal(html: &str) -> String {
-    // 1. Pre-sanitize: Remove literal terminal escapes to prevent raw injection
-    // \x1b is standard ESC, \u{9B} is 8-bit CSI
-    let safe_html = html
-        .replace(['\x1b', '\u{9B}'], "")
-        .replace("</img>", "")
-        .replace("</font>", "")
-        .replace("</i>", "")
-        .replace("</div>", "");
-    let result = RefCell::new(String::with_capacity(safe_html.len()));
+    // 1. Pre-sanitize: Remove literal terminal escapes and invalid void closing tag `</img>`
+    // Keep valid closing tags (`</font>`, `</i>`, `</div>`) intact so end-tag handlers fire!
+    let safe_html = html.replace(['\x1b', '\u{9B}'], "").replace("</img>", "");
+
+    // Collect raw bytes in the rewriter sink so multi-byte UTF-8 sequences split across chunks aren't dropped
+    let raw_bytes = RefCell::new(Vec::<u8>::with_capacity(safe_html.len()));
     let indent_level: RefCell<u8> = RefCell::new(0);
     let sensecat_depth = std::rc::Rc::new(std::cell::RefCell::new(0));
     let list_counters = std::rc::Rc::new(std::cell::RefCell::new(Vec::<usize>::new()));
@@ -437,8 +469,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
         // === Longman: Remove duplicate/noisy elements entirely ===
         element!(".hyphenation.frequent, .popetymology, .popverbs, .popcolloheader", {
             move |el| {
-                // This kills the duplicate headword, the ALL CAPS duplicates,
-                // and completely silences the multiple <table> tags.
                 el.remove();
                 Ok(())
             }
@@ -519,10 +549,16 @@ pub fn render_html_to_terminal(html: &str) -> String {
                 Ok(())
             }
         }),
-        // === Longman: Verb Tables (Hide entire table, print stub) ===
-        element!("table", {
+        // === Longman: Verb Tables (Hide entire table and all inner elements/text) ===
+        element!("table, table *", {
             move |el| {
-                el.remove(); // Silently delete the tables and ALL text inside them
+                el.remove();
+                Ok(())
+            }
+        }),
+        text!("table, table *", {
+            move |t| {
+                t.remove();
                 Ok(())
             }
         }),
@@ -553,9 +589,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
         element!(".registerlab", {
             move |el| {
                 push_end_tag_handler!(el, |end| {
-                    // We check if it's the main header one by ensuring it breaks to a new line
-                    // Note: Because registerlab is used inline later, we might just add a simple space
-                    // But since you asked for a newline after "formal", we can drop it in.
                     end.before("\n", ContentType::Text);
                     end.remove();
                     Ok(())
@@ -591,7 +624,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
                 Ok(())
             }
         }),
-        // I've also added these to clean up the rest of the raw tags in your output:
         element!("prongrp, pronunit, container, etym, subentryblk, inflgrp, influnit, infl", {
             move |el| {
                 el.remove_and_keep_content();
@@ -1069,8 +1101,8 @@ pub fn render_html_to_terminal(html: &str) -> String {
                 Ok(())
             }
         }),
-        // === Paragraphs & Block Elements ===
-        element!("p, div, tr, section", {
+        // === Paragraphs & Block Elements (excluding `tr` inside removed tables) ===
+        element!("p, div, section", {
             let indent = &indent_level;
             move |el| {
                 // Skip adding block newlines for Longman inline-wrapper divs
@@ -1173,9 +1205,9 @@ pub fn render_html_to_terminal(html: &str) -> String {
         element!("pos, .pos", {
             move |el| {
                 // Prepending a space fixes the missing gap after the pronunciation
-                el.before(&format!(" {ITALIC_ON}"), ContentType::Html);
+                el.before(&format!(" {DARK_GREEN}{ITALIC_ON}"), ContentType::Html);
                 push_end_tag_handler!(el, |end| {
-                    end.before(ITALIC_OFF, ContentType::Html);
+                    end.before(&format!("{ITALIC_OFF}{COLOR_RESET}"), ContentType::Html);
                     end.remove();
                     Ok(())
                 });
@@ -1186,13 +1218,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
         // === Chambers structural tags ===
         element!("cb13, cb13_entry, m_entry, mwe", {
             move |el| {
-                el.remove_and_keep_content();
-                Ok(())
-            }
-        }),
-        element!("td", {
-            move |el| {
-                el.before("\t", ContentType::Text);
                 el.remove_and_keep_content();
                 Ok(())
             }
@@ -1223,11 +1248,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
             }
         }),
         // === Passthrough structural wrappers: remove tag, keep content ===
-        // OED4: phon, gbl, gbr, n, c, cw, hg, idg, see, cnt
-        // Webster: com
-        // Translation: trn
-        // Collins: superentry, entry, hwblk, hwgrp, hwunit, datablk,
-        //          gramcat, pospgrp, pospunit, sensecat, defgrp, defunit
         element!("phon, gbl, gbr, n, c, cw, hg, idg, see, cnt, com, trn", {
             move |el| {
                 el.remove_and_keep_content();
@@ -1250,6 +1270,17 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     Ok(())
                 });
                 el.remove_and_keep_content();
+                Ok(())
+            }
+        }),
+        // === Etymonline: Related Headword (<a class="related_hw">): newline after to separate from definition ===
+        element!(".related_hw", {
+            move |el| {
+                push_end_tag_handler!(el, |end| {
+                    end.before("\n", ContentType::Text);
+                    end.remove();
+                    Ok(())
+                });
                 Ok(())
             }
         }),
@@ -1320,9 +1351,7 @@ pub fn render_html_to_terminal(html: &str) -> String {
     }
 
     let mut rewriter = HtmlRewriter::new(settings, |chunk: &[u8]| {
-        if let Ok(text) = std::str::from_utf8(chunk) {
-            result.borrow_mut().push_str(text);
-        }
+        raw_bytes.borrow_mut().extend_from_slice(chunk);
     });
 
     if let Err(e) = rewriter.write(safe_html.as_bytes()) {
@@ -1332,12 +1361,12 @@ pub fn render_html_to_terminal(html: &str) -> String {
         eprintln!("HTML render end error: {e}");
     }
 
-    let raw = result.into_inner();
+    let raw = String::from_utf8_lossy(&raw_bytes.into_inner()).into_owned();
 
     // Post-process:
-    // 1. Replace &nbsp; with space (lol_html passes entities through as-is)
+    // 1. Decode HTML entities safely (up to 40 chars lookahead for long HTML5 named entities)
     // 2. Strip OED source formatting: \n followed by \t (inter-tag whitespace)
-    // 3. Condense 3+ consecutive newlines into 2.
+    // 3. Condense 3+ consecutive newlines into 2 in O(N) linear time.
     let chars: Vec<char> = raw.chars().collect();
     let len = chars.len();
 
@@ -1352,8 +1381,8 @@ pub fn render_html_to_terminal(html: &str) -> String {
             '&' => {
                 let mut j = i + 1;
                 let mut found_semi = false;
-                // Lookahead up to 15 chars to find the closing ';'
-                while j - i < 15 {
+                // Lookahead up to 40 chars to cover all standard HTML5 named entities
+                while j - i < 40 {
                     let Some(&cj) = chars.get(j) else {
                         break;
                     };
@@ -1388,14 +1417,22 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     }
                     // Safe entity: push characters to output
                     for mut dc in decoded.chars() {
+                        if dc == '\r' {
+                            continue;
+                        }
+                        if dc == '\n' {
+                            newline_count += 1;
+                            if newline_count <= 2 {
+                                cleaned.push('\n');
+                            }
+                            continue;
+                        }
                         // Translate non-breaking spaces to standard spaces
                         if dc == '\u{A0}' {
                             dc = ' ';
                         }
                         cleaned.push(dc);
-                        if dc != '\n' && dc != '\r' {
-                            newline_count = 0;
-                        }
+                        newline_count = 0;
                     }
                     i = j + 1;
                     continue;
@@ -1439,10 +1476,12 @@ pub fn render_html_to_terminal(html: &str) -> String {
                     continue;
                 }
 
-                // Otherwise, it's a normal space inside a sentence
+                // Otherwise, emit the entire run of spaces/tabs in one pass (O(N) total time)
                 newline_count = 0;
-                cleaned.push(ch);
-                i += 1;
+                if let Some(space_slice) = chars.get(i..j) {
+                    cleaned.extend(space_slice.iter().copied());
+                }
+                i = j;
             }
             _ => {
                 newline_count = 0;
@@ -1452,6 +1491,6 @@ pub fn render_html_to_terminal(html: &str) -> String {
         }
     }
 
-    cleaned.push_str(RESET_ALL);
-    cleaned.trim().to_string()
+    let trimmed = cleaned.trim();
+    format!("{trimmed}{RESET_ALL}")
 }

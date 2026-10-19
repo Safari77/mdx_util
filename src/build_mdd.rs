@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use log::info;
@@ -10,7 +11,8 @@ use crate::report::print_progress;
 pub fn run_build_mdd(directory: &str, password: &str, file: &str) -> Result<()> {
     info!("Building MDD from directory: {directory}");
 
-    let dir_path = PathBuf::from(shellexpand::tilde(directory).to_string());
+    let expanded_dir = PathBuf::from(shellexpand::tilde(directory).to_string());
+    let dir_path = std::fs::canonicalize(&expanded_dir).unwrap_or(expanded_dir);
 
     if !dir_path.exists() {
         return Err(mdx::ZdbError::invalid_path(format!(
@@ -26,9 +28,11 @@ pub fn run_build_mdd(directory: &str, password: &str, file: &str) -> Result<()> 
         )));
     }
 
-    // Determine output file path
+    // Determine output file path without stripping dots in directory names (e.g. "dict.v1.2")
     let output_file = if file.is_empty() {
-        dir_path.with_extension("mdd")
+        let mut os_str: OsString = dir_path.as_os_str().to_owned();
+        os_str.push(".mdd");
+        PathBuf::from(os_str)
     } else {
         PathBuf::from(shellexpand::tilde(file).to_string())
     };

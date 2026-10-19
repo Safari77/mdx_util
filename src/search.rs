@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use log::{error, info};
 
@@ -12,7 +12,7 @@ use crate::utils;
 
 // 简化的搜索函数 - ZDB
 pub fn search_zdb(
-    file_path: &PathBuf,
+    file_path: &Path,
     key: &str,
     preview: bool,
     start_with_match: bool,
@@ -32,24 +32,28 @@ pub fn search_zdb(
             // Display main entry
             println!("Found: '{}' at {} ", index.key, index.entry_no);
 
+            let is_binary = zdb.is_binary_content();
             let indexes = zdb.get_indexes(index.entry_no, 10)?;
             for (i, entry_index) in indexes.iter().enumerate() {
                 let content_bytes = zdb.get_data(entry_index, true)?;
-                let content = if zdb.is_binary_content() {
-                    format!("Binary content ({} bytes)", content_bytes.len())
-                } else {
-                    String::from_utf8_lossy(&content_bytes).to_string()
-                };
+                let byte_size = content_bytes.len();
+
                 println!(
                     "  {}: '{}' at {} - Size: {} bytes",
                     i + 1,
                     entry_index.key,
                     entry_index.entry_no,
-                    content.len()
+                    byte_size
                 );
+
                 if preview {
-                    let text_content = mdx::utils::extract_text_from_html(&content)?;
-                    println!("     Preview: {}", utils::take_chars(&text_content, 1000));
+                    if is_binary {
+                        println!("     Preview: [Binary content ({byte_size} bytes)]");
+                    } else {
+                        let content = String::from_utf8_lossy(&content_bytes);
+                        let text_content = mdx::utils::extract_text_from_html(&content)?;
+                        println!("     Preview: {}", utils::take_chars(&text_content, 1000));
+                    }
                 }
             }
             Ok(())
@@ -67,7 +71,7 @@ pub fn search_zdb(
 
 // 简化的搜索函数 - MDX Reader
 pub fn search_mdx_db(
-    file_path: &PathBuf,
+    file_path: &Path,
     key: &str,
     preview: bool,
     start_with_match: bool,
@@ -75,8 +79,9 @@ pub fn search_mdx_db(
 ) -> Result<()> {
     info!("Search {} in mdx file: {}", key, file_path.display());
 
-    let mdx_url = url::Url::from_file_path(file_path)
-        .map_err(|()| mdx::ZdbError::invalid_path(format!("{}", file_path.display())))?;
+    let abs_path = utils::to_absolute_path(file_path)?;
+    let mdx_url = url::Url::from_file_path(&abs_path)
+        .map_err(|()| mdx::ZdbError::invalid_path(format!("{}", abs_path.display())))?;
 
     let mut mdx_reader = MdxReader::from_url(&mdx_url, "")?;
 
