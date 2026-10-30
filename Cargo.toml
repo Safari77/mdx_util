@@ -14,8 +14,6 @@ publish = false
 default = ["icu"]
 # Use ICU library for text collation and locale support
 icu = ["mdx/icu"]
-# Use Rust-ICU bindings (alternative to icu feature)
-rust-icu = ["mdx/rust-icu"]
 
 [[bin]]
 name = "mdx_util"
