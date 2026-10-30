@@ -45,7 +45,6 @@ fern = "0.7.1"
 # File and path handling
 shellexpand = "3.1"
 walkdir = "2.4"
-glob = "0.3"
 
 # Data processing
 regex = "1.11"
